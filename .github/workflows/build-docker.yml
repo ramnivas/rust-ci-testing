@@ -1,0 +1,54 @@
+name: Build Docker
+
+on:
+  release:
+    types: [released]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Build and publish Docker image
+  build-docker:
+    runs-on: ubuntu-20.04
+
+    strategy:
+      matrix:
+        # For these target platforms
+        include:
+          - image: cli
+          - image: server
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ matrix.image }}
+
+      - name: Download artifacts
+        run: |
+          curl -L -s ${{ github.server_url }}/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/rust-ci-testing-x86_64-unknown-linux-gnu.zip --output rust-ci-testing-x86_64-unknown-linux-gnu.zip
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.image }}.ci
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
